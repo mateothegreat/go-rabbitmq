@@ -64,14 +64,23 @@ func (m *Management) DeleteExchanges(exchanges []Exchange) error {
 
 	return nil
 }
+
+func (m *Management) CreateQueue(exchange string, queue Queue) error {
+	_, err := m.Connection.Channel.QueueDeclare(queue.Name, queue.Durable, true, false, false, nil)
+	if err != nil {
+		return err
+	}
+
+	if err := m.Connection.Channel.QueueBind(queue.Name, queue.Name, exchange, false, nil); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (m *Management) CreateQueues(exchange Exchange) error {
 	for _, queue := range exchange.Queues {
-		_, err := m.Connection.Channel.QueueDeclare(queue.Name, queue.Durable, true, false, false, nil)
-		if err != nil {
-			return err
-		}
-
-		if err := m.Connection.Channel.QueueBind(queue.Name, queue.Name, exchange.Name, false, nil); err != nil {
+		if err := m.CreateQueue(exchange.Name, queue); err != nil {
 			return err
 		}
 	}
