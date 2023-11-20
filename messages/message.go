@@ -1,5 +1,5 @@
 package messages
 
-type Message struct {
-	Payload interface{} `json:"payload"`
+type Message[T any] struct {
+	Payload T `json:"payload"`
 }

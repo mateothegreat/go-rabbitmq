@@ -61,7 +61,7 @@ func (p *Producer) SetupCloseHandler(exitCh chan struct{}) {
 	}()
 }
 
-func (p *Producer) Publish(ctx context.Context, exchange string, key string, message *messages.Message) error {
+func Publish[T any](p *Producer, ctx context.Context, exchange string, key string, message *messages.Message[T]) error {
 	exitCh := make(chan struct{})
 	confirmsCh := make(chan *amqp.DeferredConfirmation)
 	confirmsDoneCh := make(chan struct{})
