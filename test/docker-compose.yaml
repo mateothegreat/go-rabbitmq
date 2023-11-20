@@ -1,0 +1,16 @@
+version: "3"
+
+services:
+  rabbitmq-test:
+    platform: "linux/arm64/v8"
+    image: "rabbitmq:3.10-management"
+    container_name: "rabbitmq-test"
+    hostname: "rabbitmq.local"
+    environment:
+      RABBITMQ_ERLANG_COOKIE: "SWQOKODSQALRPCLNMEQGFDSSDFFDDGSFDFSD"
+      RABBITMQ_DEFAULT_USER: "guest"
+      RABBITMQ_DEFAULT_PASS: "guest"
+      RABBITMQ_DEFAULT_VHOST: "/"
+    ports:
+      - "15672:15672"
+      - "5672:5672"
