@@ -27,6 +27,7 @@ type ConsumerTestSuite struct {
 	Producer *producer.Producer
 	Exchange management.Exchange
 	Chan     chan *messages.Message[TestPayload]
+	Manager  *management.Management
 }
 
 func TestConsumerSuite(t *testing.T) {
@@ -34,6 +35,9 @@ func TestConsumerSuite(t *testing.T) {
 }
 
 func (s *ConsumerTestSuite) SetupSuite() {
+	manager := &management.Management{}
+	s.Manager = manager
+
 	producer := &producer.Producer{}
 	err := producer.Connect("amqp://guest:guest@localhost:5672/")
 	s.NoError(err)
@@ -58,7 +62,7 @@ func (s *ConsumerTestSuite) SetupSuite() {
 
 	s.Chan = make(chan *messages.Message[TestPayload], 1)
 
-	err = management.Setup(s.Consumer.Connection, management.SetupArgs{
+	err = s.Manager.Connect("amqp://guest:guest@localhost:5672/", management.SetupArgs{
 		Exchanges: []management.Exchange{s.Exchange},
 	})
 
@@ -66,7 +70,7 @@ func (s *ConsumerTestSuite) SetupSuite() {
 }
 
 func (s *ConsumerTestSuite) TearDownSuite() {
-	err := management.DeleteExchanges(s.Consumer.Connection, []management.Exchange{s.Exchange})
+	err := s.Manager.DeleteExchanges([]management.Exchange{s.Exchange})
 	s.NoError(err)
 }
 
@@ -78,7 +82,7 @@ func (s *ConsumerTestSuite) TestConsume() {
 	}()
 
 	if !routines.WaitForCondition(func() bool {
-		queue, err := management.CreatePassiveQueue(s.Consumer.Connection, s.Exchange.Queues[0])
+		queue, err := s.Manager.CreatePassiveQueue(s.Exchange.Queues[0])
 		s.NoError(err)
 		return queue.Messages == 0
 	}, 3*time.Second, 100*time.Millisecond) {

@@ -4,14 +4,13 @@ import (
 	"testing"
 
 	"github.com/go-faker/faker/v4"
-	"github.com/nvr-ai/go-rabbitmq/connections"
 	"github.com/stretchr/testify/suite"
 )
 
 type ManagementTestSuite struct {
 	suite.Suite
-	SetupArgs  SetupArgs
-	Connection *connections.Connection
+	SetupArgs SetupArgs
+	Manager   *Management
 }
 
 func TestManagementSuite(t *testing.T) {
@@ -19,9 +18,8 @@ func TestManagementSuite(t *testing.T) {
 }
 
 func (s *ManagementTestSuite) SetupSuite() {
-	connection, err := connections.CreateConnection("amqp://guest:guest@localhost:5672/")
-	s.NoError(err)
-	s.Connection = connection
+	manager := &Management{}
+	s.Manager = manager
 
 	exchanges := make([]Exchange, 0)
 
@@ -48,11 +46,11 @@ func (s *ManagementTestSuite) SetupSuite() {
 }
 
 func (s *ManagementTestSuite) TestSetup() {
-	err := Setup(s.Connection, s.SetupArgs)
+	err := s.Manager.Connect("amqp://guest:guest@localhost:5672/", s.SetupArgs)
 	s.NoError(err)
 }
 
 func (s *ManagementTestSuite) TestTearDown() {
-	err := DeleteExchanges(s.Connection, s.SetupArgs.Exchanges)
+	err := s.Manager.DeleteExchanges(s.SetupArgs.Exchanges)
 	s.NoError(err)
 }

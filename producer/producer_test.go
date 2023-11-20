@@ -23,6 +23,7 @@ type ProducerTestSuite struct {
 	Wg       sync.WaitGroup
 	Producer *Producer
 	Exchange management.Exchange
+	Manager  *management.Management
 }
 
 func TestTenantSuite(t *testing.T) {
@@ -30,6 +31,8 @@ func TestTenantSuite(t *testing.T) {
 }
 
 func (s *ProducerTestSuite) SetupSuite() {
+	manager := &management.Management{}
+	s.Manager = manager
 	producer := &Producer{}
 
 	err := producer.Connect("amqp://guest:guest@localhost:5672/")
@@ -49,7 +52,7 @@ func (s *ProducerTestSuite) SetupSuite() {
 		},
 	}
 
-	err = management.Setup(s.Producer.Connection, management.SetupArgs{
+	err = s.Manager.Connect("amqp://guest:guest@localhost:5672/", management.SetupArgs{
 		Exchanges: []management.Exchange{s.Exchange},
 	})
 
@@ -57,7 +60,7 @@ func (s *ProducerTestSuite) SetupSuite() {
 }
 
 func (s *ProducerTestSuite) TearDownSuite() {
-	err := management.DeleteExchanges(s.Producer.Connection, []management.Exchange{s.Exchange})
+	err := s.Manager.DeleteExchanges([]management.Exchange{s.Exchange})
 	s.NoError(err)
 }
 
@@ -66,13 +69,17 @@ func (s *ProducerTestSuite) TestNewConsumer() {
 }
 
 func (s *ProducerTestSuite) TestPublish() {
-	err := s.Producer.Publish(context.Background(), s.Exchange.Name, s.Exchange.Queues[0].Name, &messages.Message{
-		Payload: &TestPayload{Hello: "world", T: time.Now().String()},
-	})
+	message := &messages.Message[TestPayload]{
+		Payload: TestPayload{
+			Hello: "world",
+			T:     "test",
+		},
+	}
+	err := Publish[TestPayload](s.Producer, context.Background(), s.Exchange.Name, s.Exchange.Queues[0].Name, message)
 	s.NoError(err)
 
 	if !routines.WaitForCondition(func() bool {
-		queue, err := management.CreatePassiveQueue(s.Producer.Connection, s.Exchange.Queues[0])
+		queue, err := s.Manager.CreatePassiveQueue(s.Exchange.Queues[0])
 		s.NoError(err)
 		return queue.Messages == 1
 	}, 3*time.Second, 100*time.Millisecond) {

@@ -1,6 +1,3 @@
-// This example declares a durable exchange, and publishes one messages to that
-// exchange. This example allows up to 8 outstanding publisher confirmations
-// before blocking publishing.
 package producer
 
 import (
