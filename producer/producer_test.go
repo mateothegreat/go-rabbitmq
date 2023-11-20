@@ -8,6 +8,7 @@ import (
 
 	"github.com/nvr-ai/go-rabbitmq/management"
 	"github.com/nvr-ai/go-rabbitmq/messages"
+	routines "github.com/nvr-ai/go-util/routines"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -56,7 +57,8 @@ func (s *ProducerTestSuite) SetupSuite() {
 }
 
 func (s *ProducerTestSuite) TearDownSuite() {
-	println("TearDownSubTest")
+	err := management.DeleteExchanges(s.Producer.Connection, []management.Exchange{s.Exchange})
+	s.NoError(err)
 }
 
 func (s *ProducerTestSuite) TestNewConsumer() {
@@ -68,4 +70,12 @@ func (s *ProducerTestSuite) TestPublish() {
 		Payload: &TestPayload{Hello: "world", T: time.Now().String()},
 	})
 	s.NoError(err)
+
+	if !routines.WaitForCondition(func() bool {
+		queue, err := management.CreatePassiveQueue(s.Producer.Connection, s.Exchange.Queues[0])
+		s.NoError(err)
+		return queue.Messages == 1
+	}, 3*time.Second, 100*time.Millisecond) {
+		s.Fail("Queue still has messages")
+	}
 }

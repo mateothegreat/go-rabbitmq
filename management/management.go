@@ -2,6 +2,7 @@ package management
 
 import (
 	"github.com/nvr-ai/go-rabbitmq/connections"
+	"github.com/rabbitmq/amqp091-go"
 )
 
 type SetupArgs struct {
@@ -47,15 +48,27 @@ func DeleteExchanges(connection *connections.Connection, exchanges []Exchange) e
 }
 func CreateQueues(connection *connections.Connection, exchange Exchange) error {
 	for _, queue := range exchange.Queues {
-		if _, err := connection.Channel.QueueDeclare(queue.Name, queue.Durable, true, false, false, nil); err != nil {
+		_, err := connection.Channel.QueueDeclare(queue.Name, queue.Durable, true, false, false, nil)
+		if err != nil {
 			return err
 		}
+
 		if err := connection.Channel.QueueBind(queue.Name, queue.Name, exchange.Name, false, nil); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func CreatePassiveQueue(connection *connections.Connection, queue Queue) (amqp091.Queue, error) {
+	q, err := connection.Channel.QueueDeclarePassive(queue.Name, queue.Durable, false, false, false, nil)
+
+	if err != nil {
+		return amqp091.Queue{}, err
+	}
+
+	return q, nil
 }
 
 func DeleteQueues(connection *connections.Connection, exchange Exchange) error {
