@@ -1,11 +1,10 @@
 package consumer
 
 import (
-	"encoding/json"
 	"log"
 
 	"github.com/nvr-ai/go-rabbitmq/connections"
-	"github.com/nvr-ai/go-rabbitmq/messages"
+	"github.com/nvr-ai/go-rabbitmq/management"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -14,6 +13,7 @@ type Consumer struct {
 	Channel    *amqp.Channel
 	Tag        string
 	Done       chan error
+	Manager    *management.Management
 }
 
 func (p *Consumer) Connect(uri string) error {
@@ -31,14 +31,12 @@ func (p *Consumer) Connect(uri string) error {
 		return err
 	}
 
-	// defer connection.Conn.Close()
-
 	p.Connection = connection
 
 	return nil
 }
 
-func Consume[T any](p *Consumer, queue string, ch chan<- *messages.Message[T]) error {
+func Consume(p *Consumer, queue string, ch chan<- *amqp.Delivery) error {
 	log.Printf("consumer: starting consume on %s", queue)
 
 	var err error
@@ -73,18 +71,7 @@ func Consume[T any](p *Consumer, queue string, ch chan<- *messages.Message[T]) e
 
 	for d := range deliveries {
 		log.Printf("consumer.Consume: received a message: %s", d.Body)
-
-		message := &messages.Message[T]{}
-
-		err := json.Unmarshal(d.Body, message)
-
-		if err != nil {
-			d.Ack(false)
-			return err
-		}
-
-		ch <- message
-		println("asdf")
+		ch <- &d
 	}
 
 	return nil
@@ -106,15 +93,4 @@ func (p *Consumer) Close() error {
 	}
 
 	return nil
-}
-
-func handle(deliveries <-chan amqp.Delivery, done chan error) {
-	for d := range deliveries {
-		log.Printf(
-			"consumer: received a message: %s",
-			d.Body,
-		)
-		d.Ack(false)
-	}
-	done <- nil
 }

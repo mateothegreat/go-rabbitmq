@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/nvr-ai/go-rabbitmq/connections"
-	"github.com/nvr-ai/go-rabbitmq/messages"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -33,15 +32,16 @@ func (p *Producer) Connect(uri string) error {
 		Vhost:      "/",
 		Properties: amqp.NewConnectionProperties(),
 	}
-	config.Properties.SetClientConnectionName("producer-with-confirms")
+
+	hostname, _ := os.Hostname()
+	config.Properties.SetClientConnectionName(hostname)
 
 	connection, err := connections.CreateConnection(uri)
 
 	if err != nil {
+		println(err.Error())
 		return err
 	}
-
-	// defer connection.Conn.Close()
 
 	p.Connection = connection
 
@@ -58,7 +58,7 @@ func (p *Producer) SetupCloseHandler(exitCh chan struct{}) {
 	}()
 }
 
-func Publish[T any](p *Producer, ctx context.Context, exchange string, key string, message *messages.Message[T]) error {
+func Publish(p *Producer, ctx context.Context, exchange string, key string, message interface{}) error {
 	exitCh := make(chan struct{})
 	confirmsCh := make(chan *amqp.DeferredConfirmation)
 	confirmsDoneCh := make(chan struct{})

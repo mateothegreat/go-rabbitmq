@@ -44,11 +44,7 @@ func (s *ConsumerTestSuite) SetupSuite() {
 	s.Producer = producer
 
 	consumer := &Consumer{}
-	err = consumer.Connect("amqp://guest:guest@localhost:5672/")
-	s.NoError(err)
-
-	s.Consumer = consumer
-	s.Exchange = management.Exchange{
+	err = consumer.Connect("amqp://guest:guest@localhost:5672/", management.Exchange{
 		Name:    "test-exchange",
 		Type:    "topic",
 		Durable: true,
@@ -58,7 +54,8 @@ func (s *ConsumerTestSuite) SetupSuite() {
 				Durable: true,
 			},
 		},
-	}
+	})
+	s.NoError(err)
 
 	s.Chan = make(chan *messages.Message[TestPayload], 1)
 
@@ -77,7 +74,7 @@ func (s *ConsumerTestSuite) TearDownSuite() {
 func (s *ConsumerTestSuite) TestConsume() {
 
 	go func() {
-		err := Consume(s.Consumer, s.Exchange.Queues[0].Name, s.Chan)
+		err := Consume(s.Consumer, "test-queue", s.Chan)
 		s.NoError(err)
 	}()
 
@@ -96,7 +93,7 @@ func (s *ConsumerTestSuite) TestConsume() {
 		},
 	}
 
-	err := producer.Publish(s.Producer, context.Background(), s.Exchange.Name, s.Exchange.Queues[0].Name, message)
+	err := producer.Publish(s.Producer, context.Background(), "test-exchange", "test-queue", message)
 	s.NoError(err)
 
 	if !routines.WaitForCondition(func() bool {
