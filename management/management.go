@@ -100,9 +100,17 @@ func (m *Management) CreatePassiveQueue(queue Queue) (amqp.Queue, error) {
 
 func (m *Management) DeleteQueues(exchange Exchange) error {
 	for _, queue := range exchange.Queues {
-		if _, err := m.Connection.Channel.QueueDelete(queue.Name, false, false, false); err != nil {
+		if err := m.DeleteQueue(queue); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func (m *Management) DeleteQueue(queue Queue) error {
+	if _, err := m.Connection.Channel.QueueDelete(queue.Name, false, false, false); err != nil {
+		return err
 	}
 
 	return nil
