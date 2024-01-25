@@ -3,6 +3,6 @@ package messages
 
 type Receive struct {
 	Namespace string `json:"namespace"`
-	Body      string `json:"body"`
+	Body      []byte `json:"body"`
 	Status    string `json:"status"`
 }
