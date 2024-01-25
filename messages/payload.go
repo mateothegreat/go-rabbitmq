@@ -1,5 +1,5 @@
-// Package types contains structs and functions for working with RabbitMQ messages.
-package types
+// Package messages contains structs and functions for working with RabbitMQ messages.
+package messages
 
 import (
 	"encoding/json"
@@ -7,13 +7,13 @@ import (
 )
 
 // Message is a struct that represents a message to be sent to RabbitMQ.
-type Message struct {
+type Payload struct {
 	Namespace string `json:"namespace"`
 	Body      string `json:"body"`
 }
 
 // Marshal converts a Message to a JSON string.
-func (m *Message) Marshal() string {
+func (m *Payload) Marshal() string {
 	r, err := json.Marshal(m)
 
 	if err != nil {
