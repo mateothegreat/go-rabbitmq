@@ -2,7 +2,7 @@
 package messages
 
 type Receive struct {
-	Namespace string `json:"namespace"`
-	Body      []byte `json:"body"`
-	Status    string `json:"status"`
+	Namespace string  `json:"namespace"`
+	Body      []uint8 `json:"body"`
+	Status    string  `json:"status"`
 }
