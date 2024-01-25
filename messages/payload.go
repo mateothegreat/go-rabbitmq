@@ -6,11 +6,11 @@ import (
 	"log"
 )
 
-// Message is a struct that represents a message to be sent to RabbitMQ.
+// Payload is a struct that represents a message to be sent to RabbitMQ.
 type Payload struct {
-	Namespace string `json:"namespace"`
-	Body      string `json:"body"`
-	Status    string `json:"status"`
+	Namespace string      `json:"namespace"`
+	Body      interface{} `json:"body"`
+	Status    string      `json:"status"`
 }
 
 // Marshal converts a Message to a JSON string.
