@@ -14,12 +14,12 @@ type Payload struct {
 }
 
 // Marshal converts a Message to a JSON string.
-func (m *Payload) Marshal() string {
+func (m *Payload) Marshal() []byte {
 	r, err := json.Marshal(m)
 
 	if err != nil {
 		log.Fatalf("Error marshalling message: %s", err)
 	}
 
-	return string(r)
+	return r
 }
