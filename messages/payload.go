@@ -10,6 +10,7 @@ import (
 type Payload struct {
 	Namespace string `json:"namespace"`
 	Body      string `json:"body"`
+	Status    string `json:"status"`
 }
 
 // Marshal converts a Message to a JSON string.
