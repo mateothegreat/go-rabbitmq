@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/nvr-ai/go-rabbitmq/management"
-	"github.com/nvr-ai/go-rabbitmq/messages"
 	routines "github.com/nvr-ai/go-util/routines"
 	"github.com/stretchr/testify/suite"
 )
@@ -35,7 +34,7 @@ func (s *ProducerTestSuite) SetupSuite() {
 	s.Manager = manager
 	producer := &Producer{}
 
-	err := producer.Connect("amqp://guest:guest@localhost:5672/")
+	err := producer.Connect("amqp://rabbitmq:Agby5kma0130@10.0.10.3:5672/")
 
 	s.NoError(err)
 
@@ -52,7 +51,7 @@ func (s *ProducerTestSuite) SetupSuite() {
 		},
 	}
 
-	err = s.Manager.Connect("amqp://guest:guest@localhost:5672/", management.SetupArgs{
+	err = s.Manager.Connect("amqp://rabbitmq:Agby5kma0130@10.0.10.3:5672/", management.SetupArgs{
 		Exchanges: []management.Exchange{s.Exchange},
 	})
 
@@ -69,15 +68,10 @@ func (s *ProducerTestSuite) TestNewConsumer() {
 }
 
 func (s *ProducerTestSuite) TestPublish() {
-	message := &messages.Message[TestPayload]{
-		Payload: TestPayload{
-			Hello: "world",
-			T:     "test",
-		},
+	for {
+		err := s.Producer.Publish(context.Background(), s.Exchange.Name, s.Exchange.Queues[0].Name, []byte("test"))
+		s.NoError(err)
 	}
-	err := Publish[TestPayload](s.Producer, context.Background(), s.Exchange.Name, s.Exchange.Queues[0].Name, message)
-	s.NoError(err)
-
 	if !routines.WaitForCondition(func() bool {
 		queue, err := s.Manager.CreatePassiveQueue(s.Exchange.Queues[0])
 		s.NoError(err)
