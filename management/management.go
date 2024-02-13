@@ -39,7 +39,7 @@ func (m *Management) Connect(uri string, args SetupArgs) error {
 
 func (m *Management) CreateExchanges(exchanges []Exchange) error {
 	for _, exchange := range exchanges {
-		if err := m.Connection.Channel.ExchangeDeclare(exchange.Name, exchange.Type, exchange.Durable, true, false, false, nil); err != nil {
+		if err := m.Connection.Channel.ExchangeDeclare(exchange.Name, exchange.Type, exchange.Durable, false, false, false, nil); err != nil {
 			return err
 		}
 
@@ -66,7 +66,7 @@ func (m *Management) DeleteExchanges(exchanges []Exchange) error {
 }
 
 func (m *Management) CreateQueue(exchange string, queue Queue) error {
-	_, err := m.Connection.Channel.QueueDeclare(queue.Name, queue.Durable, true, false, false, nil)
+	_, err := m.Connection.Channel.QueueDeclare(queue.Name, queue.Durable, false, false, false, nil)
 	if err != nil {
 		return err
 	}
