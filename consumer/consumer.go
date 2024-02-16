@@ -50,6 +50,7 @@ func Consume(p *Consumer, queue string, ch chan<- *amqp.Delivery) error {
 	// defer p.Channel.Close()
 
 	p.Tag = "test-tag"
+	p.Channel.Qos(1, 0, false)
 
 	deliveries, err := p.Channel.Consume(
 		queue, // name
