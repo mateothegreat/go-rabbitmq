@@ -37,7 +37,7 @@ func (p *Consumer) Connect(uri string) error {
 }
 
 func Consume(p *Consumer, queue string, ch chan<- *amqp.Delivery, name string) error {
-	log.Printf("consumer: starting consume on %s", queue)
+	log.Printf("consumer[%s]: starting consume on %s", name, queue)
 
 	var err error
 
@@ -71,7 +71,7 @@ func Consume(p *Consumer, queue string, ch chan<- *amqp.Delivery, name string) e
 	// go handle(deliveries, p.Done)
 
 	for d := range deliveries {
-		log.Printf("consumer.Consume: received a message: %s", d.Body)
+		log.Printf("consumer[%s]: received a message: %s", name, d.Body)
 		ch <- &d
 	}
 
