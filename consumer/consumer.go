@@ -36,7 +36,7 @@ func (p *Consumer) Connect(uri string) error {
 	return nil
 }
 
-func Consume(p *Consumer, queue string, ch chan<- *amqp.Delivery) error {
+func Consume(p *Consumer, queue string, ch chan<- *amqp.Delivery, name string) error {
 	log.Printf("consumer: starting consume on %s", queue)
 
 	var err error
@@ -49,7 +49,7 @@ func Consume(p *Consumer, queue string, ch chan<- *amqp.Delivery) error {
 
 	// defer p.Channel.Close()
 
-	p.Tag = "test-tag"
+	p.Tag = name
 	p.Channel.Qos(1, 0, false)
 
 	deliveries, err := p.Channel.Consume(
