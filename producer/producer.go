@@ -48,7 +48,7 @@ func (p *Producer) Connect(uri string) error {
 		log.Fatalf("producer: channel could not be put into confirm mode: %s", err)
 	}
 
-	setupCloseHandler(p.exitCh)
+	// setupCloseHandler(p.exitCh)
 	startConfirmHandler(p.publishOk, p.confirms, p.confirmsDone, p.exitCh)
 
 	return nil
