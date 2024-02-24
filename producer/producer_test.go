@@ -290,4 +290,6 @@ func (s *ProducerTestSuite) TestPublish() {
 		s.Failf("Publish() returned an unexpected error: %v", err.Error())
 	}
 
+	println(1)
+
 }
