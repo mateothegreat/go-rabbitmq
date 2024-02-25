@@ -141,8 +141,10 @@ package producer
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/nvr-ai/go-rabbitmq/management"
 	"github.com/stretchr/testify/suite"
@@ -275,21 +277,49 @@ func (s *ProducerTestSuite) TestPublish() {
 	// 	}
 	// }
 
-	// Instantiate producer
-	p := &Producer{}
+	// // Instantiate producer
+	// p := &Producer{}
 
-	err := p.Connect("amqp://rabbitmq:Agby5kma0130@10.0.10.3:5672/")
-	if err != nil {
-		s.Failf("Connect() returned an unexpected error: %v", err.Error())
+	// err := p.Connect("amqp://rabbitmq:Agby5kma0130@10.0.10.3:5672/")
+	// if err != nil {
+	// 	s.Failf("Connect() returned an unexpected error: %v", err.Error())
+	// }
+
+	// for {
+	// 	// Test successful publish
+	// 	ctx := context.Background()
+	// 	err = p.Publish(ctx, "exchange", "key", []byte("body"))
+	// 	if err != nil {
+	// 		s.Failf("Publish() returned an unexpected error: %v", err.Error())
+	// 	}
+	// }
+
+	// println(1)
+	// Number of messages to publish
+	numMessages := 1000
+
+	var wg sync.WaitGroup
+	wg.Add(numMessages)
+
+	for i := 0; i < numMessages; i++ {
+		go func(i int) {
+			defer wg.Done()
+
+			// Context with timeout to prevent hanging
+			ctx, cancel := context.WithTimeout(context.Background(), 115*time.Second)
+			defer cancel()
+
+			// Construct a unique message for each goroutine
+			message := "Message " + strconv.Itoa(i)
+
+			// Attempt to publish a message
+			err := s.Producer.Publish(ctx, "", "testQueue", []byte(message))
+			if err != nil {
+				s.Failf("Failed to publish message %d: %v", strconv.Itoa(i), err)
+			}
+		}(i)
 	}
 
-	// Test successful publish
-	ctx := context.Background()
-	err = p.Publish(ctx, "exchange", "key", []byte("body"), "name")
-	if err != nil {
-		s.Failf("Publish() returned an unexpected error: %v", err.Error())
-	}
-
-	println(1)
-
+	// Wait for all goroutines to finish
+	wg.Wait()
 }
