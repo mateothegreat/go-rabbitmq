@@ -6,9 +6,16 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/nvr-ai/go-rabbitmq/connections"
 	"github.com/rabbitmq/amqp091-go"
+)
+
+const (
+	maxRetries = 5
+	retryDelay = 2 * time.Second
 )
 
 type Producer struct {
@@ -21,35 +28,52 @@ type Producer struct {
 }
 
 func (p *Producer) Connect(uri string) error {
+	operation := func() error {
+		var err error
+		p.Connection, err = connections.CreateConnection(uri)
+		if err != nil {
+			log.Printf("Failed to create connection: %v", err)
+			return err
+		}
 
-	var err error
-	p.Connection, err = connections.CreateConnection(uri)
+		p.Channel, err = p.Connection.Conn.Channel()
+		if err != nil {
+			log.Printf("Failed to open channel: %v", err)
+			return err
+		}
+
+		if err := p.Channel.Confirm(false); err != nil {
+			log.Printf("Channel could not be put into confirm mode: %v", err)
+			return err
+		}
+
+		// Initialization succeeded, set up the rest
+		p.setupChannel()
+		log.Printf("Producer connected and channel established to %s", uri)
+		return nil
+	}
+
+	// Retry with exponential backoff
+	expBackOff := backoff.NewExponentialBackOff()
+	expBackOff.MaxElapsedTime = 5 * time.Minute
+	err := backoff.Retry(operation, expBackOff)
 	if err != nil {
-		return err
+		log.Fatalf("Failed to connect to RabbitMQ after retries: %v", err)
 	}
 
-	p.Channel, err = p.Connection.Conn.Channel()
-	if err != nil {
-		return err
-	}
+	return nil
+}
 
-	if err := p.Channel.Confirm(false); err != nil {
-		return err
-	}
-
+func (p *Producer) setupChannel() {
 	p.exitCh = make(chan struct{})
 	p.confirms = make(chan amqp091.Confirmation, 1)
 	p.confirmsDone = make(chan struct{})
 	p.publishOk = make(chan struct{}, 1) // Signal initial readiness
 
-	log.Printf("producer: dialed %s", uri)
-
 	// Start listening for confirmations.
 	confirmChan := p.Channel.NotifyPublish(make(chan amqp091.Confirmation, 1))
 	go p.handleConfirms(confirmChan)
 	p.publishOk <- struct{}{} // Signal initial readiness
-
-	return nil
 }
 
 func (p *Producer) handleConfirms(confirmChan <-chan amqp091.Confirmation) {
