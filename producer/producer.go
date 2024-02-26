@@ -58,8 +58,8 @@ func (p *Producer) handleConfirms(confirmChan <-chan amqp091.Confirmation) {
 		case confirm := <-confirmChan:
 			if confirm.Ack {
 				log.Printf("Message confirmed with delivery tag: %d", confirm.DeliveryTag)
-			} else {
-				log.Printf("Message nack with delivery tag: %d", confirm.DeliveryTag)
+				// } else {
+				// log.Printf("Message nack with delivery tag: %d", confirm.DeliveryTag)
 			}
 			// Re-signal readiness after each confirmation
 			p.signalPublishOk()
@@ -74,8 +74,8 @@ func (p *Producer) signalPublishOk() {
 	select {
 	case p.publishOk <- struct{}{}:
 		log.Println("Signaled readiness to publish")
-	default:
-		log.Println("Publish readiness already signaled")
+		// default:
+		// 	log.Println("Publish readiness already signaled")
 	}
 }
 
