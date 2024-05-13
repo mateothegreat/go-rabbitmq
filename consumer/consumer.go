@@ -2,7 +2,9 @@ package consumer
 
 import (
 	"log"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/nvr-ai/go-rabbitmq/connections"
 	"github.com/nvr-ai/go-rabbitmq/management"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -17,21 +19,31 @@ type Consumer struct {
 }
 
 func (p *Consumer) Connect(uri string) error {
-	log.Printf("consumer: dialing %s", uri)
+	operation := func() error {
+		var err error
+		p.Connection, err = connections.CreateConnection(uri)
+		if err != nil {
+			log.Printf("Failed to create connection: %v", err)
+			return err
+		}
 
-	config := amqp.Config{
-		Vhost:      "/",
-		Properties: amqp.NewConnectionProperties(),
+		p.Channel, err = p.Connection.Conn.Channel()
+		if err != nil {
+			log.Printf("Failed to open channel: %v", err)
+			return err
+		}
+
+		log.Printf("Consumer connected and channel established to %s", uri)
+		return nil
 	}
-	config.Properties.SetClientConnectionName("producer-with-confirms")
 
-	connection, err := connections.CreateConnection(uri)
-
+	// Retry with exponential backoff
+	expBackOff := backoff.NewExponentialBackOff()
+	expBackOff.MaxElapsedTime = 5 * time.Minute
+	err := backoff.Retry(operation, expBackOff)
 	if err != nil {
-		return err
+		log.Fatalf("Failed to connect to RabbitMQ after retries: %v", err)
 	}
-
-	p.Connection = connection
 
 	return nil
 }

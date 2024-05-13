@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/nvr-ai/go-rabbitmq/management"
-	"github.com/nvr-ai/go-rabbitmq/messages"
 	"github.com/nvr-ai/go-rabbitmq/producer"
 	"github.com/nvr-ai/go-util/routines"
+	"github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -26,7 +26,7 @@ type ConsumerTestSuite struct {
 	Consumer *Consumer
 	Producer *producer.Producer
 	Exchange management.Exchange
-	Chan     chan *messages.Message[TestPayload]
+	Chan     chan *amqp091.Delivery
 	Manager  *management.Management
 }
 
@@ -47,7 +47,7 @@ func (s *ConsumerTestSuite) SetupSuite() {
 	err = consumer.Connect("amqp://guest:guest@localhost:5672/")
 	s.NoError(err)
 
-	s.Chan = make(chan *messages.Message[TestPayload], 1)
+	s.Chan = make(chan *amqp091.Delivery, 1)
 
 	err = s.Manager.Connect("amqp://guest:guest@localhost:5672/", management.SetupArgs{
 		Exchanges: []management.Exchange{s.Exchange},
