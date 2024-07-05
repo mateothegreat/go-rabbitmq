@@ -3,9 +3,6 @@ package producer
 import (
 	"context"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -38,9 +35,6 @@ func (p *Producer) Connect(uri string) error {
 			multilog.Fatal("producer", "connect", err)
 			return err
 		}
-
-		// Call setupCloseHandler to handle graceful shutdown
-		setupCloseHandler(p.exitCh)
 
 		// Open a channel
 		p.Channel, err = p.Connection.Conn.Channel()
@@ -166,13 +160,4 @@ func (p *Producer) Close() {
 	if p.Connection != nil {
 		p.Connection.Conn.Close()
 	}
-}
-
-func setupCloseHandler(exitCh chan struct{}) {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		close(exitCh)
-	}()
 }
