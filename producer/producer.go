@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/mateothegreat/go-multilog/multilog"
 	"github.com/nvr-ai/go-rabbitmq/connections"
 	"github.com/rabbitmq/amqp091-go"
 )
@@ -30,26 +31,36 @@ type Producer struct {
 func (p *Producer) Connect(uri string) error {
 	operation := func() error {
 		var err error
+
+		// Create a connection
 		p.Connection, err = connections.CreateConnection(uri)
 		if err != nil {
-			log.Printf("Failed to create connection: %v", err)
+			multilog.Fatal("producer", "connect", err)
 			return err
 		}
 
+		// Call setupCloseHandler to handle graceful shutdown
+		setupCloseHandler(p.exitCh)
+
+		// Open a channel
 		p.Channel, err = p.Connection.Conn.Channel()
 		if err != nil {
-			log.Printf("Failed to open channel: %v", err)
+			multilog.Fatal("producer", "open channel", err)
 			return err
 		}
 
+		// Put the channel into confirm mode
 		if err := p.Channel.Confirm(false); err != nil {
-			log.Printf("Channel could not be put into confirm mode: %v", err)
+			multilog.Fatal("producer", "confirm mode", err)
 			return err
 		}
 
 		// Initialization succeeded, set up the rest
 		p.setupChannel()
-		log.Printf("Producer connected and channel established to %s", uri)
+		multilog.Info("producer", "connected", map[string]interface{}{
+			"uri": uri,
+		})
+
 		return nil
 	}
 
@@ -57,8 +68,11 @@ func (p *Producer) Connect(uri string) error {
 	expBackOff := backoff.NewExponentialBackOff()
 	expBackOff.MaxElapsedTime = 5 * time.Minute
 	err := backoff.Retry(operation, expBackOff)
+	multilog.Info("producer", "retrying connect", map[string]interface{}{
+		"uri": uri,
+	})
 	if err != nil {
-		log.Fatalf("Failed to connect to RabbitMQ after retries: %v", err)
+		multilog.Fatal("producer", "connect", err)
 	}
 
 	return nil
@@ -81,9 +95,13 @@ func (p *Producer) handleConfirms(confirmChan <-chan amqp091.Confirmation) {
 		select {
 		case confirm := <-confirmChan:
 			if confirm.Ack {
-				log.Printf("Message confirmed with delivery tag: %d", confirm.DeliveryTag)
+				multilog.Debug("producer", "message confirmed", map[string]interface{}{
+					"deliveryTag": confirm.DeliveryTag,
+				})
 			} else {
-				log.Printf("Message nack with delivery tag: %d", confirm.DeliveryTag)
+				multilog.Debug("producer", "message nack", map[string]interface{}{
+					"deliveryTag": confirm.DeliveryTag,
+				})
 			}
 			// Re-signal readiness after each confirmation
 			p.signalPublishOk()
@@ -111,7 +129,11 @@ func (p *Producer) Publish(ctx context.Context, exchange, key string, body []byt
 		return ctx.Err()
 	}
 
-	log.Printf("Publishing message: %s", body)
+	multilog.Debug("producer", "publish", map[string]interface{}{
+		"exchange": exchange,
+		"key":      key,
+		"body":     string(body),
+	})
 
 	err := p.Channel.PublishWithContext(
 		ctx,
