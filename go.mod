@@ -17,7 +17,7 @@ require (
 	github.com/fatih/color v1.17.0 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/mateothegreat/go-multilog v0.0.0-20240705203549-55c60523d989 // indirect
+	github.com/mateothegreat/go-multilog v0.0.0-20240718081407-2f402bd1c2b7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

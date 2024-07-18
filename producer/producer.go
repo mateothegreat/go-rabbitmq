@@ -11,11 +11,6 @@ import (
 	"github.com/rabbitmq/amqp091-go"
 )
 
-const (
-	maxRetries = 5
-	retryDelay = 2 * time.Second
-)
-
 type Producer struct {
 	Connection   *connections.Connection
 	Channel      *amqp091.Channel
@@ -32,26 +27,36 @@ func (p *Producer) Connect(uri string) error {
 		// Create a connection
 		p.Connection, err = connections.CreateConnection(uri)
 		if err != nil {
-			multilog.Fatal("producer", "connect", err)
+			multilog.Trace("producer", "connect", map[string]interface{}{
+				"uri":   uri,
+				"error": err,
+			})
 			return err
 		}
 
 		// Open a channel
 		p.Channel, err = p.Connection.Conn.Channel()
 		if err != nil {
-			multilog.Fatal("producer", "open channel", err)
+			multilog.Trace("producer", "open channel", map[string]interface{}{
+				"uri":   uri,
+				"error": err,
+			})
 			return err
 		}
 
 		// Put the channel into confirm mode
 		if err := p.Channel.Confirm(false); err != nil {
-			multilog.Fatal("producer", "confirm mode", err)
+			multilog.Trace("producer", "confirm mode", map[string]interface{}{
+				"uri":   uri,
+				"error": err,
+				"mode":  false,
+			})
 			return err
 		}
 
 		// Initialization succeeded, set up the rest
 		p.setupChannel()
-		multilog.Info("producer", "connected", map[string]interface{}{
+		multilog.Trace("producer", "connected", map[string]interface{}{
 			"uri": uri,
 		})
 
@@ -63,10 +68,14 @@ func (p *Producer) Connect(uri string) error {
 	expBackOff.MaxElapsedTime = 5 * time.Minute
 	err := backoff.Retry(operation, expBackOff)
 	multilog.Info("producer", "retrying connect", map[string]interface{}{
-		"uri": uri,
+		"uri":            uri,
+		"maxElapsedTime": expBackOff.MaxElapsedTime,
 	})
 	if err != nil {
-		multilog.Fatal("producer", "connect", err)
+		multilog.Fatal("producer", "connect", map[string]interface{}{
+			"uri":   uri,
+			"error": err,
+		})
 	}
 
 	return nil
@@ -89,11 +98,11 @@ func (p *Producer) handleConfirms(confirmChan <-chan amqp091.Confirmation) {
 		select {
 		case confirm := <-confirmChan:
 			if confirm.Ack {
-				multilog.Debug("producer", "message confirmed", map[string]interface{}{
+				multilog.Trace("producer", "message confirmed", map[string]interface{}{
 					"deliveryTag": confirm.DeliveryTag,
 				})
 			} else {
-				multilog.Debug("producer", "message nack", map[string]interface{}{
+				multilog.Trace("producer", "message nack", map[string]interface{}{
 					"deliveryTag": confirm.DeliveryTag,
 				})
 			}
