@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/nvr-ai/go-rabbitmq/connections"
-	"github.com/nvr-ai/go-rabbitmq/management"
+	"github.com/mateothegreat/go-rabbitmq/connections"
+	"github.com/mateothegreat/go-rabbitmq/management"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 

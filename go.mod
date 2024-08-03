@@ -1,4 +1,4 @@
-module github.com/nvr-ai/go-rabbitmq
+module github.com/mateothegreat/go-rabbitmq
 
 go 1.22.0
 

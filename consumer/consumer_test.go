@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nvr-ai/go-rabbitmq/management"
-	"github.com/nvr-ai/go-rabbitmq/producer"
+	"github.com/mateothegreat/go-rabbitmq/management"
+	"github.com/mateothegreat/go-rabbitmq/producer"
 	"github.com/nvr-ai/go-util/routines"
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/suite"
