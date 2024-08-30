@@ -33,7 +33,6 @@ func (p *Consumer) Connect(uri string) error {
 			return err
 		}
 
-		log.Printf("Consumer connected and channel established to %s", uri)
 		return nil
 	}
 
@@ -49,8 +48,6 @@ func (p *Consumer) Connect(uri string) error {
 }
 
 func Consume(p *Consumer, queue string, ch chan<- *amqp.Delivery, name string) error {
-	log.Printf("consumer[%s]: starting consume on %s", name, queue)
-
 	var err error
 
 	p.Channel, err = p.Connection.Conn.Channel()
@@ -83,7 +80,6 @@ func Consume(p *Consumer, queue string, ch chan<- *amqp.Delivery, name string) e
 	// go handle(deliveries, p.Done)
 
 	for d := range deliveries {
-		log.Printf("consumer[%s]: received a message: %s", name, d.Body)
 		ch <- &d
 	}
 
@@ -91,8 +87,6 @@ func Consume(p *Consumer, queue string, ch chan<- *amqp.Delivery, name string) e
 }
 
 func (p *Consumer) Close() error {
-	log.Printf("consumer: closing")
-
 	err := p.Channel.Close()
 
 	if err != nil {
