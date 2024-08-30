@@ -18,6 +18,12 @@ type Producer struct {
 	confirms     chan amqp091.Confirmation
 	confirmsDone chan struct{}
 	publishOk    chan struct{}
+	loggers      []multilog.Logger
+}
+
+func (p *Producer) WithLoggers(loggers ...multilog.Logger) *Producer {
+	p.loggers = loggers
+	return p
 }
 
 func (p *Producer) Connect(uri string) error {

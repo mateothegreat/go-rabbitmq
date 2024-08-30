@@ -173,7 +173,7 @@ func (s *ProducerTestSuite) SetupSuite() {
 	s.Manager = manager
 	producer := &Producer{}
 
-	err := producer.Connect("amqp://rabbitmq:Agby5kma0130@10.0.10.3:5672/")
+	err := producer.Connect("amqp://rabbitmq:rabbitmq@localhost:5672")
 
 	s.NoError(err)
 
@@ -190,7 +190,7 @@ func (s *ProducerTestSuite) SetupSuite() {
 		},
 	}
 
-	err = s.Manager.Connect("amqp://rabbitmq:Agby5kma0130@10.0.10.3:5672/", management.SetupArgs{
+	err = s.Manager.Connect("amqp://rabbitmq:rabbitmq@localhost:5672", management.SetupArgs{
 		Exchanges: []management.Exchange{s.Exchange},
 	})
 
@@ -305,15 +305,11 @@ func (s *ProducerTestSuite) TestPublish() {
 		go func(i int) {
 			defer wg.Done()
 
-			// Context with timeout to prevent hanging
 			ctx, cancel := context.WithTimeout(context.Background(), 115*time.Second)
 			defer cancel()
 
-			// Construct a unique message for each goroutine
 			message := "Message " + strconv.Itoa(i)
-
-			// Attempt to publish a message
-			err := s.Producer.Publish(ctx, "", "testQueue", []byte(message))
+			err := s.Producer.Publish(ctx, "", "test-queue", []byte(message))
 			if err != nil {
 				s.Failf("Failed to publish message %d: %v", strconv.Itoa(i), err)
 			}
