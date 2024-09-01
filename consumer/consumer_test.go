@@ -26,7 +26,6 @@ type ConsumerTestSuite struct {
 	Consumer *Consumer
 	Producer *producer.Producer
 	Exchange management.Exchange
-	Chan     chan *amqp091.Delivery
 	Manager  *management.Management
 }
 
@@ -37,19 +36,28 @@ func TestConsumerSuite(t *testing.T) {
 func (s *ConsumerTestSuite) SetupSuite() {
 	manager := &management.Management{}
 	s.Manager = manager
-
+	s.Exchange = management.Exchange{
+		Name:    "test-exchange",
+		Type:    "topic",
+		Durable: false,
+		Queues: []management.Queue{
+			{
+				Name:    "test-queue",
+				Durable: false,
+			},
+		},
+	}
 	producer := &producer.Producer{}
-	err := producer.Connect("amqp://guest:guest@localhost:5672/")
+	err := producer.Connect("amqp://rabbitmq:rabbitmq@localhost:5672/")
 	s.NoError(err)
 	s.Producer = producer
 
 	consumer := &Consumer{}
-	err = consumer.Connect("amqp://guest:guest@localhost:5672/")
+	err = consumer.Connect("amqp://rabbitmq:rabbitmq@localhost:5672/")
 	s.NoError(err)
+	s.Consumer = consumer
 
-	s.Chan = make(chan *amqp091.Delivery, 1)
-
-	err = s.Manager.Connect("amqp://guest:guest@localhost:5672/", management.SetupArgs{
+	err = s.Manager.Connect("amqp://rabbitmq:rabbitmq@localhost:5672/", management.SetupArgs{
 		Exchanges: []management.Exchange{s.Exchange},
 	})
 
@@ -57,14 +65,18 @@ func (s *ConsumerTestSuite) SetupSuite() {
 }
 
 func (s *ConsumerTestSuite) TearDownSuite() {
-	err := s.Manager.DeleteExchanges([]management.Exchange{s.Exchange})
-	s.NoError(err)
+	// err := s.Manager.DeleteExchanges([]management.Exchange{s.Exchange})
+	// s.NoError(err)
 }
 
 func (s *ConsumerTestSuite) TestConsume() {
+	var err error
+	var ch <-chan amqp091.Delivery
 
 	go func() {
-		err := Consume(s.Consumer, "test-queue", s.Chan)
+		ch, err = s.Consumer.Consume(ConsumerArgs{
+			Queue: "test-queue",
+		})
 		s.NoError(err)
 	}()
 
@@ -76,24 +88,21 @@ func (s *ConsumerTestSuite) TestConsume() {
 		s.Fail("Queue can't be consumed yet")
 	}
 
-	// message := &messages.Message{
-	// 	Payload: TestPayload{
-	// 		Hello: "world",
-	// 		T:     "test",
-	// 	},
-	// }
-
-	err := producer.Publish(s.Producer, context.Background(), "test-exchange", "test-queue", message)
+	err = s.Producer.Publish(context.Background(), "test-exchange", "test-queue", []byte("hello"))
 	s.NoError(err)
 
 	if !routines.WaitForCondition(func() bool {
 		for {
 			select {
-			case msg := <-s.Chan:
-				log.Printf("consumer: received message %s", msg.Payload.Hello)
-				s.Equal(message.Payload.Hello, msg.Payload.Hello)
+			case msg := <-ch:
+				log.Printf("consumer: received message %s", msg.Body)
+				if ackErr := msg.Ack(false); ackErr != nil {
+					log.Printf("consumer: error acking message: %s", ackErr)
+					s.Fail("Error acking message")
+					return false
+				}
+				s.Equal("hello", string(msg.Body))
 				return true
-
 			case <-time.After(3 * time.Second):
 				log.Printf("consumer: still waiting on the message...")
 				return false
@@ -102,4 +111,7 @@ func (s *ConsumerTestSuite) TestConsume() {
 	}, 5*time.Second, 100*time.Millisecond) {
 		s.Fail("Queue still has messages")
 	}
+
+	err = s.Consumer.Close()
+	s.NoError(err)
 }

@@ -1,7 +1,6 @@
 package consumer
 
 import (
-	"log"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -14,8 +13,20 @@ type Consumer struct {
 	Connection *connections.Connection
 	Channel    *amqp.Channel
 	Tag        string
-	Done       chan error
 	Manager    *management.Management
+}
+
+type ConsumerArgs struct {
+	Queue         string
+	Name          string
+	AutoAck       bool
+	Exclusive     bool
+	NoLocal       bool
+	NoWait        bool
+	PrefetchSize  int
+	PrefetchCount int
+	Global        bool
+	Arguments     map[string]any
 }
 
 func (p *Consumer) Connect(uri string) error {
@@ -23,13 +34,11 @@ func (p *Consumer) Connect(uri string) error {
 		var err error
 		p.Connection, err = connections.CreateConnection(uri)
 		if err != nil {
-			log.Printf("Failed to create connection: %v", err)
 			return err
 		}
 
 		p.Channel, err = p.Connection.Conn.Channel()
 		if err != nil {
-			log.Printf("Failed to open channel: %v", err)
 			return err
 		}
 
@@ -41,60 +50,45 @@ func (p *Consumer) Connect(uri string) error {
 	expBackOff.MaxElapsedTime = 5 * time.Minute
 	err := backoff.Retry(operation, expBackOff)
 	if err != nil {
-		log.Fatalf("Failed to connect to RabbitMQ after retries: %v", err)
+		return err
 	}
 
 	return nil
 }
 
-func Consume(p *Consumer, queue string, ch chan<- *amqp.Delivery, name string) error {
+func (p *Consumer) Consume(args ConsumerArgs) (<-chan amqp.Delivery, error) {
 	var err error
-
 	p.Channel, err = p.Connection.Conn.Channel()
-
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// defer p.Channel.Close()
-
-	p.Tag = name
-	p.Channel.Qos(1, 0, false)
+	p.Tag = args.Name
+	p.Channel.Qos(args.PrefetchSize, args.PrefetchCount, args.Global)
 
 	deliveries, err := p.Channel.Consume(
-		queue, // name
-		p.Tag, // consumerTag,
-		false, // noAck
-		false, // exclusive
-		false, // noLocal
-		false, // noWait
-		nil,   // arguments
+		args.Queue,     // name
+		p.Tag,          // consumerTag,
+		args.AutoAck,   // noAck
+		args.Exclusive, // exclusive
+		args.NoLocal,   // noLocal
+		args.NoWait,    // noWait
+		args.Arguments, // arguments
 	)
-
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	p.Done = make(chan error)
-
-	// go handle(deliveries, p.Done)
-
-	for d := range deliveries {
-		ch <- &d
-	}
-
-	return nil
+	return deliveries, nil
 }
 
 func (p *Consumer) Close() error {
 	err := p.Channel.Close()
-
 	if err != nil {
 		return err
 	}
 
 	err = p.Connection.Conn.Close()
-
 	if err != nil {
 		return err
 	}
