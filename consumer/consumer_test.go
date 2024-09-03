@@ -64,11 +64,6 @@ func (s *ConsumerTestSuite) SetupSuite() {
 	s.NoError(err)
 }
 
-func (s *ConsumerTestSuite) TearDownSuite() {
-	// err := s.Manager.DeleteExchanges([]management.Exchange{s.Exchange})
-	// s.NoError(err)
-}
-
 func (s *ConsumerTestSuite) TestConsume() {
 	var err error
 	var ch <-chan amqp091.Delivery
