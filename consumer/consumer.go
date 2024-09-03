@@ -15,7 +15,6 @@ type Consumer struct {
 	Tag        string
 	Manager    *management.Management
 }
-
 type ConsumerArgs struct {
 	Queue         string
 	Name          string
