@@ -27,12 +27,12 @@ func GetClient() *amqprpc.Client {
 	return amqprpcClient
 }
 
-func RPC[R any](ctx context.Context, routingKey string, payload interface{}) (*R, error) {
+func RPC[R any](ctx context.Context, routingKey string, payload interface{}, timeout time.Duration) (*R, error) {
 	m, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
-	request := amqprpc.NewRequest().WithRoutingKey(routingKey).WithBody(string(m)).WithTimeout(10 * time.Second)
+	request := amqprpc.NewRequest().WithRoutingKey(routingKey).WithBody(string(m)).WithTimeout(timeout).WithContext(ctx)
 	response, err := GetClient().Send(request)
 	if err != nil {
 		return nil, err
