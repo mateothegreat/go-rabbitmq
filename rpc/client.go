@@ -8,7 +8,6 @@ import (
 
 	amqprpc "github.com/0x4b53/amqp-rpc"
 	"github.com/mateothegreat/go-multilog/multilog"
-	"github.com/nvr-ai/go-types"
 )
 
 var amqprpcClient *amqprpc.Client
@@ -28,15 +27,16 @@ func GetClient() *amqprpc.Client {
 	return amqprpcClient
 }
 
-func RPC[R any](ctx context.Context, key types.MapKey, payload interface{}) (*R, error) {
-	m, _ := json.Marshal(payload)
-	request := amqprpc.NewRequest().WithRoutingKey(string(key)).WithBody(string(m)).WithTimeout(10 * time.Second)
-
+func RPC[R any](ctx context.Context, routingKey string, payload interface{}) (*R, error) {
+	m, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	request := amqprpc.NewRequest().WithRoutingKey(routingKey).WithBody(string(m)).WithTimeout(10 * time.Second)
 	response, err := GetClient().Send(request)
 	if err != nil {
 		return nil, err
 	}
-
 	var r R
 	err = json.Unmarshal([]byte(response.Body), &r)
 	if err != nil {
