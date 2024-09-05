@@ -7,7 +7,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/mateothegreat/go-multilog/multilog"
-	"github.com/mateothegreat/go-rabbitmq/connections"
+	"github.com/nvr-ai/go-rabbitmq/connections"
 	"github.com/rabbitmq/amqp091-go"
 )
 

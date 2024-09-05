@@ -1,7 +1,7 @@
 package management
 
 import (
-	"github.com/mateothegreat/go-rabbitmq/connections"
+	"github.com/nvr-ai/go-rabbitmq/connections"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 

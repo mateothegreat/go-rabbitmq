@@ -6,7 +6,7 @@
 // 	"testing"
 // 	"time"
 
-// 	"github.com/mateothegreat/go-rabbitmq/management"
+// 	"github.com/nvr-ai/go-rabbitmq/management"
 // 	"github.com/stretchr/testify/suite"
 // )
 
@@ -146,7 +146,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mateothegreat/go-rabbitmq/management"
+	"github.com/nvr-ai/go-rabbitmq/management"
 	"github.com/stretchr/testify/suite"
 )
 
