@@ -7,7 +7,6 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/go-faker/faker/v4 v4.2.0
 	github.com/mateothegreat/go-multilog v0.0.0-20240827064703-d95ef77859ba
-	github.com/nvr-ai/go-rabbitmq v0.0.0-20240905153052-6d26ce8b5214
 	github.com/nvr-ai/go-types v0.0.0-20240905224129-05200fb5af97
 	github.com/nvr-ai/go-util v0.0.0-20231226162050-9d6760b1b253
 	github.com/rabbitmq/amqp091-go v1.9.0
