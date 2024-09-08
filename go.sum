@@ -37,10 +37,10 @@ github.com/mattn/go-colorable v0.1.13/go.mod h1:7S9/ev0klgBDR4GtXTXX8a3vIGJpMovk
 github.com/mattn/go-isatty v0.0.16/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=
 github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
 github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
-github.com/nvr-ai/go-types v0.0.0-20240905224129-05200fb5af97 h1:ZnFlrmGjvkOQRmHxLGL5ZM/zs3CNzkunfQHMeolDp94=
-github.com/nvr-ai/go-types v0.0.0-20240905224129-05200fb5af97/go.mod h1:LASjh837b0zV+SdpiMIiiS8CNUNtzXDyuPscBOngNPI=
-github.com/nvr-ai/go-util v0.0.0-20231226162050-9d6760b1b253 h1:2HWcP9jatlIkkJAk5GxWLiCG3hjRYLX4rLFgEPN5CiE=
-github.com/nvr-ai/go-util v0.0.0-20231226162050-9d6760b1b253/go.mod h1:q1l89TIrtiyGLe13BeO7515m9MC4GkRsqBU0nXpm/3o=
+github.com/nvr-ai/go-types v0.0.0-20240908040056-52516215ff00 h1:4JIWrc0q05A4i0nno/WL+BDgBsL30+lYf0vIkpg3708=
+github.com/nvr-ai/go-types v0.0.0-20240908040056-52516215ff00/go.mod h1:LASjh837b0zV+SdpiMIiiS8CNUNtzXDyuPscBOngNPI=
+github.com/nvr-ai/go-util v0.0.0-20240908091050-0d8bb114ab73 h1:S0y1B3dMyG6zAbVJ0Yw/SYuu9QAhEW/r01Aq404dAcI=
+github.com/nvr-ai/go-util v0.0.0-20240908091050-0d8bb114ab73/go.mod h1:05qeXjGnFtSxOsoiwf2gE7iXlaQRSkNCC3+5PSv5ses=
 github.com/pion/datachannel v1.5.8 h1:ph1P1NsGkazkjrvyMfhRBUAWMxugJjq2HfQifaOoSNo=
 github.com/pion/datachannel v1.5.8/go.mod h1:PgmdpoaNBLX9HNzNClmdki4DYW5JtI7Yibu8QzbL3tI=
 github.com/pion/dtls/v2 v2.2.7/go.mod h1:8WiMkebSHFD0T+dIU+UeBaoV7kDhOW5oDCzZ7WZ/F9s=

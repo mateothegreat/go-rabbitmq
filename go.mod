@@ -7,10 +7,9 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/go-faker/faker/v4 v4.2.0
 	github.com/mateothegreat/go-multilog v0.0.0-20240827064703-d95ef77859ba
-	github.com/nvr-ai/go-types v0.0.0-20240905224129-05200fb5af97
-	github.com/nvr-ai/go-util v0.0.0-20231226162050-9d6760b1b253
+	github.com/nvr-ai/go-types v0.0.0-20240908040056-52516215ff00
+	github.com/nvr-ai/go-util v0.0.0-20240908091050-0d8bb114ab73
 	github.com/rabbitmq/amqp091-go v1.9.0
-	github.com/streadway/amqp v1.0.0
 	github.com/stretchr/testify v1.9.0
 )
 
@@ -41,6 +40,7 @@ require (
 	github.com/pion/turn/v2 v2.1.6 // indirect
 	github.com/pion/webrtc/v3 v3.3.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/streadway/amqp v1.0.0 // indirect
 	github.com/wlynxg/anet v0.0.3 // indirect
 	go.opentelemetry.io/otel v1.29.0 // indirect
 	go.opentelemetry.io/otel/metric v1.29.0 // indirect
