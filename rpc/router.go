@@ -9,7 +9,7 @@ import (
 	amqprpc "github.com/0x4b53/amqp-rpc"
 	"github.com/nvr-ai/go-rabbitmq/producer"
 	"github.com/nvr-ai/go-types"
-	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/streadway/amqp"
 
 	"github.com/mateothegreat/go-multilog/multilog"
 )
