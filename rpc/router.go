@@ -20,14 +20,14 @@ type RPCArgs struct {
 }
 
 type Handler interface {
-	Handle(c context.Context, req types.ClientMessage[any], args RPCArgs)
+	Handle(req types.InternalMessage[any], args RPCArgs)
 }
 
 type TypedHandler[T any] struct {
-	handler func(c context.Context, req types.ClientMessage[T], args RPCArgs)
+	handler func(req types.InternalMessage[T], args RPCArgs)
 }
 
-func (th *TypedHandler[T]) Handle(c context.Context, req types.ClientMessage[any], args RPCArgs) {
+func (th *TypedHandler[T]) Handle(req types.InternalMessage[any], args RPCArgs) {
 	dataType := reflect.TypeOf((*T)(nil)).Elem()
 	multilog.Info("webrtc", "routerpc:handlerType", map[string]interface{}{
 		"handlerType": dataType.Name(),
@@ -51,12 +51,17 @@ func (th *TypedHandler[T]) Handle(c context.Context, req types.ClientMessage[any
 	}
 	req.Data = dataValue.Elem().Interface()
 
-	typedReq := types.ClientMessage[T]{
-		Method: req.Method,
-		Data:   req.Data.(T),
+	typedReq := types.InternalMessage[T]{
+		Session:       req.Session,
+		CorrelationID: req.CorrelationID,
+		Date:          req.Date,
+		Scope:         req.Scope,
+		Context:       req.Context,
+		Method:        req.Method,
+		Data:          req.Data.(T),
 	}
 
-	th.handler(c, typedReq, args)
+	th.handler(typedReq, args)
 }
 
 var (
@@ -65,7 +70,7 @@ var (
 )
 
 // AddHandler adds a handler to the broker.
-func AddHandler[T any](name types.Method, handler func(c context.Context, req types.ClientMessage[T], args RPCArgs)) error {
+func AddHandler[T any](name types.Method, handler func(req types.InternalMessage[T], args RPCArgs)) error {
 	if _, exists := handlers[name]; exists {
 		multilog.Error("webrtc", "addhandler:handleralreadyexists", map[string]interface{}{
 			"error": "handler already exists",
@@ -73,7 +78,9 @@ func AddHandler[T any](name types.Method, handler func(c context.Context, req ty
 		return fmt.Errorf("handler already exists")
 	}
 
-	handlers[name] = &TypedHandler[T]{handler: handler}
+	handlers[name] = &TypedHandler[T]{
+		handler: handler,
+	}
 
 	multilog.Debug("webrtc", "addhandler:handleradded", map[string]interface{}{
 		"name": name,
@@ -104,21 +111,16 @@ func RouteRPC(c context.Context, rw *amqprpc.ResponseWriter, d amqp.Delivery) {
 	}
 
 	if handler, exists := handlers[method]; exists {
-		var msg types.ClientMessage[any]
+		var msg types.InternalMessage[any]
 		err := json.Unmarshal(d.Body, &msg)
 		if err != nil {
-			multilog.Error("webrtc", "routerpc:unmarshalclientmessage", map[string]interface{}{
+			multilog.Error("webrtc", "routerpc:unmarshalInternalMessage", map[string]interface{}{
 				"error": err.Error(),
 			})
 			d.Ack(false)
 			return
 		}
-
-		multilog.Info("webrtc", "routerpc:unmarshalclientmessage", map[string]interface{}{
-			"message": msg,
-		})
-
-		handler.Handle(c, msg, RPCArgs{
+		handler.Handle(msg, RPCArgs{
 			ResponseWriter: rw,
 			Delivery:       d,
 		})
@@ -131,4 +133,24 @@ func RouteRPC(c context.Context, rw *amqprpc.ResponseWriter, d amqp.Delivery) {
 		d.Ack(false)
 		return
 	}
+}
+
+// Setup sets up the broker.
+//
+// Returns:
+//   - error if failed to setup broker
+func Setup(uri string, routingKey string) {
+	s := amqprpc.NewServer(uri)
+	s.WithErrorLogger(func(format string, args ...interface{}) {
+		multilog.Error("webrtc", "setup:witherrorlogger", map[string]interface{}{
+			"message": fmt.Sprintf(format, args...),
+		})
+	})
+	s.WithConsumeSettings(amqprpc.ConsumeSettings{
+		QoSPrefetchCount: 1,
+	})
+
+	s.Bind(amqprpc.DirectBinding(routingKey, amqprpc.HandlerFunc(RouteRPC)))
+
+	go s.ListenAndServe()
 }
