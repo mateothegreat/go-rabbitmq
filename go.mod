@@ -1,4 +1,4 @@
-module github.com/nvr-ai/go-rabbitmq
+module github.com/mateothegreat/go-rabbitmq
 
 go 1.22.0
 
@@ -6,9 +6,6 @@ require (
 	github.com/0x4b53/amqp-rpc v1.0.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/go-faker/faker/v4 v4.2.0
-	github.com/mateothegreat/go-multilog v0.0.0-20240827064703-d95ef77859ba
-	github.com/nvr-ai/go-types v0.0.0-20240914220931-025da328b2c2
-	github.com/nvr-ai/go-util v0.0.0-20240908091050-0d8bb114ab73
 	github.com/rabbitmq/amqp091-go v1.10.0
 	github.com/stretchr/testify v1.9.0
 )
