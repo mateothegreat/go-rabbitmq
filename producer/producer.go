@@ -2,7 +2,9 @@ package producer
 
 import (
 	"context"
-	"log"
+	"errors"
+	"fmt"
+	"sync"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -11,14 +13,94 @@ import (
 	"github.com/rabbitmq/amqp091-go"
 )
 
+// DefaultConfirmTimeout bounds how long Publish waits for a broker
+// confirmation when the caller's context carries no deadline of its own. A
+// caller passing context.Background() would otherwise wait indefinitely on a
+// broker that has stopped confirming without dropping the connection.
+const DefaultConfirmTimeout = 30 * time.Second
+
+var (
+	// ErrNotConnected is returned by Publish before Connect has succeeded or
+	// after Close.
+	ErrNotConnected = errors.New("producer: not connected")
+
+	// ErrConfirmsDisabled is returned when the channel is not in confirm mode,
+	// which means a publish cannot be confirmed at all.
+	ErrConfirmsDisabled = errors.New("producer: channel is not in confirm mode")
+
+	// ErrNack is returned when the broker explicitly refused a publish.
+	ErrNack = errors.New("producer: publish was nacked by the broker")
+
+	// ErrChannelClosed is returned when the channel closed before the broker
+	// confirmed a publish, which leaves the outcome of that message unknown.
+	ErrChannelClosed = errors.New("producer: channel closed before confirmation")
+)
+
+// confirmation resolves when the broker settles one delivery tag. It is
+// satisfied by *amqp091.DeferredConfirmation.
+type confirmation interface {
+	WaitContext(ctx context.Context) (bool, error)
+}
+
+// channel is the slice of *amqp091.Channel that the publish path depends on.
+// It exists so the concurrency of that path can be exercised without a broker;
+// amqpChannel is the only implementation used outside of tests.
+type channel interface {
+	publish(ctx context.Context, exchange, key string, msg amqp091.Publishing) (confirmation, error)
+	isClosed() bool
+	close() error
+}
+
+// amqpChannel adapts *amqp091.Channel to channel. It holds no state and makes
+// no decisions, so almost nothing escapes the tests that drive channel.
+type amqpChannel struct {
+	ch *amqp091.Channel
+}
+
+var _ channel = amqpChannel{}
+var _ confirmation = (*amqp091.DeferredConfirmation)(nil)
+
+func (a amqpChannel) publish(ctx context.Context, exchange, key string, msg amqp091.Publishing) (confirmation, error) {
+	// amqp091 allocates the delivery tag and writes the frames under the
+	// channel's own mutex, so concurrent callers can neither interleave frames
+	// nor race for a tag, and it tracks the returned confirmation by tag until
+	// the broker settles it.
+	dc, err := a.ch.PublishWithDeferredConfirmWithContext(ctx, exchange, key, false, false, msg)
+	if err != nil {
+		return nil, err
+	}
+	if dc == nil {
+		return nil, ErrConfirmsDisabled
+	}
+	return dc, nil
+}
+
+func (a amqpChannel) isClosed() bool { return a.ch.IsClosed() }
+
+func (a amqpChannel) close() error { return a.ch.Close() }
+
+// Producer publishes messages on a single channel in confirm mode. A Producer
+// must be created by Connect and is safe for concurrent use afterwards; it
+// must not be copied.
 type Producer struct {
-	Connection   *connections.Connection
-	Channel      *amqp091.Channel
-	exitCh       chan struct{}
-	confirms     chan amqp091.Confirmation
-	confirmsDone chan struct{}
-	publishOk    chan struct{}
-	loggers      []multilog.Logger
+	// ConfirmTimeout bounds the wait for a broker confirmation when the
+	// context passed to Publish has no deadline. Zero means
+	// DefaultConfirmTimeout. Set it before the first Publish.
+	ConfirmTimeout time.Duration
+
+	// Connection and Channel expose the underlying amqp091 objects for callers
+	// that need them. Connect replaces both; callers must not mutate them.
+	Connection *connections.Connection
+	Channel    *amqp091.Channel
+
+	// mu guards the fields Connect and Close replace, so a publish can run
+	// concurrently with either. It is only held long enough to snapshot ch,
+	// never across a publish or a confirmation wait.
+	mu     sync.RWMutex
+	ch     channel
+	closed bool
+
+	loggers []multilog.Logger
 }
 
 func (p *Producer) WithLoggers(loggers ...multilog.Logger) *Producer {
@@ -26,12 +108,23 @@ func (p *Producer) WithLoggers(loggers ...multilog.Logger) *Producer {
 	return p
 }
 
+// Connect dials uri, opens a channel and puts it into confirm mode, retrying
+// with exponential backoff for up to five minutes.
+//
+// Connect may be called again to replace a channel that has been lost. The
+// superseded channel and connection are closed, which releases any publish
+// still waiting on a confirmation from them with an error rather than leaving
+// it blocked.
+//
+// Arguments:
+//   - uri: The AMQP URI to dial.
+//
+// Returns:
+//   - An error when no attempt within the backoff window succeeded, leaving
+//     the producer unchanged.
 func (p *Producer) Connect(uri string) error {
 	operation := func() error {
-		var err error
-
-		// Create a connection
-		p.Connection, err = connections.CreateConnection(uri)
+		conn, err := connections.CreateConnection(uri)
 		if err != nil {
 			multilog.Trace("producer", "connect", map[string]interface{}{
 				"uri":   uri,
@@ -40,102 +133,114 @@ func (p *Producer) Connect(uri string) error {
 			return err
 		}
 
-		// Open a channel
-		p.Channel, err = p.Connection.Conn.Channel()
+		ch, err := conn.Conn.Channel()
 		if err != nil {
 			multilog.Trace("producer", "open channel", map[string]interface{}{
 				"uri":   uri,
 				"error": err,
 			})
+			// Drop the connection so a retry does not leave one dialed per
+			// failed attempt.
+			conn.Conn.Close()
 			return err
 		}
 
-		// Put the channel into confirm mode
-		if err := p.Channel.Confirm(false); err != nil {
+		// Confirm mode is what makes a delivery tag, and therefore a
+		// confirmation, exist for every publish.
+		if err := ch.Confirm(false); err != nil {
 			multilog.Trace("producer", "confirm mode", map[string]interface{}{
 				"uri":   uri,
 				"error": err,
 				"mode":  false,
 			})
+			conn.Conn.Close()
 			return err
 		}
 
-		// Initialization succeeded, set up the rest
-		p.setupChannel()
-		multilog.Trace("producer", "connected", map[string]interface{}{
-			"uri": uri,
-		})
+		p.setChannel(conn, ch)
 
 		return nil
 	}
 
-	// Retry with exponential backoff
 	expBackOff := backoff.NewExponentialBackOff()
 	expBackOff.MaxElapsedTime = 5 * time.Minute
-	err := backoff.Retry(operation, expBackOff)
-	multilog.Info("producer", "retrying connect", map[string]interface{}{
-		"uri":            uri,
-		"maxElapsedTime": expBackOff.MaxElapsedTime,
-	})
-	if err != nil {
-		multilog.Fatal("producer", "connect", map[string]interface{}{
-			"uri":   uri,
-			"error": err,
+
+	if err := backoff.Retry(operation, expBackOff); err != nil {
+		multilog.Error("producer", "connect", map[string]interface{}{
+			"uri":            uri,
+			"maxElapsedTime": expBackOff.MaxElapsedTime,
+			"error":          err,
 		})
+		return fmt.Errorf("producer: connect to %q: %w", uri, err)
 	}
+
+	multilog.Trace("producer", "connected", map[string]interface{}{
+		"uri": uri,
+	})
 
 	return nil
 }
 
-func (p *Producer) setupChannel() {
-	p.exitCh = make(chan struct{})
-	p.confirms = make(chan amqp091.Confirmation, 1)
-	p.confirmsDone = make(chan struct{})
-	p.publishOk = make(chan struct{}, 1) // Signal initial readiness
-
-	// Start listening for confirmations.
-	confirmChan := p.Channel.NotifyPublish(make(chan amqp091.Confirmation, 1))
-	go p.handleConfirms(confirmChan)
-	p.publishOk <- struct{}{} // Signal initial readiness
-}
-
-func (p *Producer) handleConfirms(confirmChan <-chan amqp091.Confirmation) {
-	for {
-		select {
-		case confirm := <-confirmChan:
-			if confirm.Ack {
-				multilog.Trace("producer", "message confirmed", map[string]interface{}{
-					"deliveryTag": confirm.DeliveryTag,
-				})
-			} else {
-				multilog.Trace("producer", "message nack", map[string]interface{}{
-					"deliveryTag": confirm.DeliveryTag,
-				})
-			}
-			// Re-signal readiness after each confirmation
-			p.signalPublishOk()
-		case <-p.exitCh:
-			log.Println("Confirmation handler exiting")
-			return
-		}
+// setChannel installs a freshly opened channel and retires the previous one.
+func (p *Producer) setChannel(conn *connections.Connection, ch *amqp091.Channel) {
+	oldConn := p.replaceChannel(amqpChannel{ch: ch}, conn, ch)
+	if oldConn != nil && oldConn.Conn != nil && oldConn != conn {
+		oldConn.Conn.Close()
 	}
 }
 
-func (p *Producer) signalPublishOk() {
-	p.publishOk <- struct{}{}
-	// select {
-	// case p.publishOk <- struct{}{}:
-	// 	log.Println("Signaled readiness to publish")
-	// 	// default:
-	// 	// 	log.Println("Publish readiness already signaled")
-	// }
+// replaceChannel swaps in next, closes the channel it supersedes and returns
+// the connection that was displaced so the caller can retire it.
+func (p *Producer) replaceChannel(next channel, conn *connections.Connection, ch *amqp091.Channel) *connections.Connection {
+	p.mu.Lock()
+	old, oldConn := p.ch, p.Connection
+	p.Connection = conn
+	p.Channel = ch
+	p.ch = next
+	p.closed = false
+	p.mu.Unlock()
+
+	// Closing outside the lock keeps Publish from stalling behind broker I/O.
+	// amqp091 settles every outstanding delivery tag as unacknowledged while
+	// the channel shuts down, so publishes still waiting on the old channel
+	// fail instead of blocking forever.
+	if old != nil {
+		old.close()
+	}
+
+	return oldConn
 }
 
+// Publish sends body to exchange under the given routing key and waits for the
+// broker to confirm it.
+//
+// Publish is safe to call from multiple goroutines and does not serialize its
+// callers. Every message gets its own delivery tag and each caller waits only
+// on the confirmation for its own tag, so many messages are in flight at once
+// and throughput is bounded by how fast frames can be written rather than by
+// one broker round trip per message.
+//
+// A nil return means the broker acknowledged the message. An error means it
+// was refused, could not be written, or was not confirmed before the deadline;
+// a deadline leaves the outcome unknown, so a caller that requires delivery
+// has to retry and tolerate a duplicate.
+//
+// Arguments:
+//   - ctx: Cancels the publish and bounds the confirmation wait.
+//   - exchange: The exchange to publish to, empty for the default exchange.
+//   - key: The routing key.
+//   - body: The message body.
+//
+// Returns:
+//   - nil once the broker has acknowledged the message, otherwise the reason
+//     it could not be confirmed.
 func (p *Producer) Publish(ctx context.Context, exchange, key string, body []byte) error {
-	select {
-	case <-p.publishOk: // Wait for readiness
-	case <-ctx.Done():
-		return ctx.Err()
+	p.mu.RLock()
+	ch, timeout := p.ch, p.ConfirmTimeout
+	p.mu.RUnlock()
+
+	if ch == nil {
+		return ErrNotConnected
 	}
 
 	multilog.Debug("producer", "publish", map[string]interface{}{
@@ -144,35 +249,82 @@ func (p *Producer) Publish(ctx context.Context, exchange, key string, body []byt
 		"body":     string(body),
 	})
 
-	err := p.Channel.PublishWithContext(
-		ctx,
-		exchange,
-		key,
-		false,
-		false,
-		amqp091.Publishing{
-			ContentType: "text/plain",
-			Body:        body,
-		},
-	)
+	confirm, err := ch.publish(ctx, exchange, key, amqp091.Publishing{
+		ContentType: "text/plain",
+		Body:        body,
+	})
 	if err != nil {
-		// Re-signal readiness in case of error to not block future publishes
-		select {
-		case p.publishOk <- struct{}{}:
-		default:
-		}
-		return err
+		multilog.Trace("producer", "publish failed", map[string]interface{}{
+			"exchange": exchange,
+			"key":      key,
+			"error":    err,
+		})
+		return fmt.Errorf("producer: publish to %q: %w", exchange, err)
 	}
+
+	if timeout <= 0 {
+		timeout = DefaultConfirmTimeout
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	acked, err := confirm.WaitContext(waitCtx)
+	if err != nil {
+		multilog.Trace("producer", "confirmation not received", map[string]interface{}{
+			"exchange": exchange,
+			"key":      key,
+			"error":    err,
+		})
+		return fmt.Errorf("producer: awaiting confirmation from %q: %w", exchange, err)
+	}
+
+	if !acked {
+		// A shutting down channel settles its outstanding tags as
+		// unacknowledged, which is indistinguishable from a broker refusal
+		// except by the state of the channel itself.
+		if ch.isClosed() {
+			multilog.Trace("producer", "channel closed before confirmation", map[string]interface{}{
+				"exchange": exchange,
+				"key":      key,
+			})
+			return ErrChannelClosed
+		}
+
+		multilog.Trace("producer", "message nacked", map[string]interface{}{
+			"exchange": exchange,
+			"key":      key,
+		})
+		return ErrNack
+	}
+
+	multilog.Trace("producer", "message confirmed", map[string]interface{}{
+		"exchange": exchange,
+		"key":      key,
+	})
 
 	return nil
 }
 
+// Close releases the channel and connection. It is safe to call more than
+// once, safe on a producer that never connected, and safe to call while
+// publishes are in flight: closing the channel settles their delivery tags as
+// unacknowledged so they return an error instead of waiting for a confirmation
+// that will never arrive.
 func (p *Producer) Close() {
-	close(p.exitCh)
-	if p.Channel != nil {
-		p.Channel.Close()
+	p.mu.Lock()
+	if p.closed {
+		p.mu.Unlock()
+		return
 	}
-	if p.Connection != nil {
-		p.Connection.Conn.Close()
+	p.closed = true
+	ch, conn := p.ch, p.Connection
+	p.ch = nil
+	p.mu.Unlock()
+
+	if ch != nil {
+		ch.close()
+	}
+	if conn != nil && conn.Conn != nil {
+		conn.Conn.Close()
 	}
 }

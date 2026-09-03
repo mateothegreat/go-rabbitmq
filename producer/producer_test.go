@@ -1,147 +1,11 @@
-// package producer
-
-// import (
-// 	"context"
-// 	"sync"
-// 	"testing"
-// 	"time"
-
-// 	"github.com/mateothegreat/go-rabbitmq/management"
-// 	"github.com/stretchr/testify/suite"
-// )
-
-// type TestPayload struct {
-// 	Hello string `json:"hello"`
-// 	T     string `json:"t"`
-// }
-
-// type ProducerTestSuite struct {
-// 	suite.Suite
-// 	Endpoint string
-// 	Wg       sync.WaitGroup
-// 	Producer *Producer
-// 	Exchange management.Exchange
-// 	Manager  *management.Management
-// }
-
-// func TestTenantSuite(t *testing.T) {
-// 	suite.Run(t, new(ProducerTestSuite))
-// }
-
-// func (s *ProducerTestSuite) SetupSuite() {
-// 	manager := &management.Management{}
-// 	s.Manager = manager
-// 	producer := &Producer{}
-
-// 	err := producer.Connect("amqp://rabbitmq:Agby5kma0130@10.0.10.3:5672/")
-
-// 	s.NoError(err)
-
-// 	s.Producer = producer
-// 	s.Exchange = management.Exchange{
-// 		Name:    "test-exchange",
-// 		Type:    "topic",
-// 		Durable: true,
-// 		Queues: []management.Queue{
-// 			{
-// 				Name:    "test-queue",
-// 				Durable: true,
-// 			},
-// 		},
-// 	}
-
-// 	err = s.Manager.Connect("amqp://rabbitmq:Agby5kma0130@10.0.10.3:5672/", management.SetupArgs{
-// 		Exchanges: []management.Exchange{s.Exchange},
-// 	})
-
-// 	s.NoError(err)
-// }
-
-// func (s *ProducerTestSuite) TearDownSuite() {
-// 	err := s.Manager.DeleteExchanges([]management.Exchange{s.Exchange})
-// 	s.NoError(err)
-// }
-
-// func (s *ProducerTestSuite) TestNewConsumer() {
-
-// }
-
-// func (s *ProducerTestSuite) TestPublish() {
-// 	// ctx, cancel := context.WithCancel(context.Background())
-// 	// defer cancel() // Ensure cancel is called to release resources
-
-// 	// go func() {
-// 	// 	for {
-// 	// 		println(11)
-// 	// 		err := s.Producer.Publish(ctx, s.Exchange.Name, s.Exchange.Queues[0].Name, []byte("test"), "test")
-// 	// 		s.NoError(err)
-// 	// 		println(22)
-// 	// 	}
-// 	// }()
-
-// 	// // Wait for a few seconds before canceling the context
-// 	// time.Sleep(time.Second * 3)
-
-// 	// // Cancel the context to stop publishing
-// 	// cancel()
-
-// 	// // Wait for the goroutines in the producer to clean up
-// 	// time.Sleep(time.Second * 2)
-// 	// // if !routines.WaitForCondition(func() bool {
-// 	// // 	queue, err := s.Manager.CreatePassiveQueue(s.Exchange.Queues[0])
-// 	// // 	s.NoError(err)
-// 	// // 	return queue.Messages == 1
-// 	// // }, 3*time.Second, 100*time.Millisecond) {
-// 	// // 	s.Fail("Queue still has messages")
-// 	// // }
-// 	// Number of producers to create
-// 	numProducers := 1
-
-// 	// Create a context with timeout for the test
-// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-// 	defer cancel()
-
-// 	// Channel to collect errors from goroutines
-// 	errCh := make(chan error, numProducers)
-
-// 	// Create and start multiple producers concurrently
-// 	for i := 0; i < numProducers; i++ {
-// 		go func(id int) {
-// 			// Instantiate a new Producer
-// 			p := &Producer{}
-
-// 			// Connect to RabbitMQ
-// 			err := p.Connect("amqp://rabbitmq:Agby5kma0130@10.0.10.3:5672/")
-// 			if err != nil {
-// 				errCh <- err
-// 				return
-// 			}
-
-// 			// Publish a message
-// 			err = p.Publish(ctx, "your_exchange", "your_key", []byte("your_message"), "your_client_name")
-// 			if err != nil {
-// 				errCh <- err
-// 				return
-// 			}
-// 		}(i)
-// 	}
-
-//		// Wait for all goroutines to finish or timeout
-//		for i := 0; i < numProducers; i++ {
-//			select {
-//			case err := <-errCh:
-//				s.Failf("Error in goroutine: %v", err.Error())
-//			case <-ctx.Done():
-//				s.Failf("Test timeout: %v", ctx.Err().Error())
-//				return
-//			}
-//		}
-//	}
 package producer
 
 import (
 	"context"
-	"strconv"
+	"fmt"
+	"net"
+	"net/url"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -149,6 +13,42 @@ import (
 	"github.com/mateothegreat/go-rabbitmq/management"
 	"github.com/stretchr/testify/suite"
 )
+
+// brokerURI is the broker these tests run against. `make test/setup` brings up
+// a matching one via docker-compose.yaml.
+const brokerURI = "amqp://rabbitmq:rabbitmq@localhost:5672"
+
+// uri returns the broker to use, allowing RABBITMQ_URI to point the suite at
+// something other than the compose broker.
+func uri() string {
+	if v := os.Getenv("RABBITMQ_URI"); v != "" {
+		return v
+	}
+
+	return brokerURI
+}
+
+// requireBroker skips the suite when no broker is listening. Without it a
+// missing broker costs the five minutes of connect backoff before failing.
+func requireBroker(t *testing.T) {
+	t.Helper()
+
+	parsed, err := url.Parse(uri())
+	if err != nil {
+		t.Fatalf("invalid broker uri %q: %v", uri(), err)
+	}
+
+	host := parsed.Host
+	if parsed.Port() == "" {
+		host = net.JoinHostPort(host, "5672")
+	}
+
+	conn, err := net.DialTimeout("tcp", host, 500*time.Millisecond)
+	if err != nil {
+		t.Skipf("no broker reachable at %s (%v); run `make test/setup` to start one", host, err)
+	}
+	conn.Close()
+}
 
 type TestPayload struct {
 	Hello string `json:"hello"`
@@ -165,157 +65,121 @@ type ProducerTestSuite struct {
 }
 
 func TestTenantSuite(t *testing.T) {
+	requireBroker(t)
 	suite.Run(t, new(ProducerTestSuite))
 }
 
 func (s *ProducerTestSuite) SetupSuite() {
-	manager := &management.Management{}
-	s.Manager = manager
-	producer := &Producer{}
-
-	err := producer.Connect("amqp://rabbitmq:rabbitmq@localhost:5672")
-
-	s.NoError(err)
-
-	s.Producer = producer
+	s.Manager = &management.Management{}
 	s.Exchange = management.Exchange{
-		Name:    "test-exchange",
+		Name:    "producer-test-exchange",
 		Type:    "topic",
 		Durable: true,
 		Queues: []management.Queue{
 			{
-				Name:    "test-queue",
+				Name:    "producer-test-queue",
 				Durable: true,
 			},
 		},
 	}
 
-	err = s.Manager.Connect("amqp://rabbitmq:rabbitmq@localhost:5672", management.SetupArgs{
+	err := s.Manager.Connect(uri(), management.SetupArgs{
 		Exchanges: []management.Exchange{s.Exchange},
 	})
+	s.Require().NoError(err)
 
-	s.NoError(err)
+	// Start from a known depth so the published count can be asserted.
+	s.Require().NoError(s.Manager.DeleteQueues(s.Exchange))
+	s.Require().NoError(s.Manager.CreateQueues(s.Exchange))
+
+	producer := &Producer{}
+	s.Require().NoError(producer.Connect(uri()))
+	s.Producer = producer
 }
 
 func (s *ProducerTestSuite) TearDownSuite() {
-	err := s.Manager.DeleteExchanges([]management.Exchange{s.Exchange})
-	s.NoError(err)
+	if s.Producer != nil {
+		s.Producer.Close()
+	}
+	if s.Manager != nil {
+		s.NoError(s.Manager.DeleteExchanges([]management.Exchange{s.Exchange}))
+	}
 }
 
-func (s *ProducerTestSuite) TestNewConsumer() {
-
-}
-
+// TestPublish publishes concurrently from many goroutines with no external
+// locking and checks the broker acknowledged, and enqueued, every message. This
+// is the case the readiness-token protocol could not serve: it capped the
+// producer at one unconfirmed message and could wedge its confirmation handler.
 func (s *ProducerTestSuite) TestPublish() {
-	// // ctx, cancel := context.WithCancel(context.Background())
-	// // defer cancel() // Ensure cancel is called to release resources
+	const numMessages = 1000
 
-	// // go func() {
-	// // 	for {
-	// // 		println(11)
-	// // 		err := s.Producer.Publish(ctx, s.Exchange.Name, s.Exchange.Queues[0].Name, []byte("test"), "test")
-	// // 		s.NoError(err)
-	// // 		println(22)
-	// // 	}
-	// // }()
+	queue := s.Exchange.Queues[0]
 
-	// // // Wait for a few seconds before canceling the context
-	// // time.Sleep(time.Second * 3)
+	before, err := s.Manager.CreatePassiveQueue(queue)
+	s.Require().NoError(err)
 
-	// // // Cancel the context to stop publishing
-	// // cancel()
+	errs := make([]error, numMessages)
 
-	// // // Wait for the goroutines in the producer to clean up
-	// // time.Sleep(time.Second * 2)
-	// // // if !routines.WaitForCondition(func() bool {
-	// // // 	queue, err := s.Manager.CreatePassiveQueue(s.Exchange.Queues[0])
-	// // // 	s.NoError(err)
-	// // // 	return queue.Messages == 1
-	// // // }, 3*time.Second, 100*time.Millisecond) {
-	// // // 	s.Fail("Queue still has messages")
-	// // // }
-	// // Number of producers to create
-	// numProducers := 1
-
-	// // Create a context with timeout for the test
-	// ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	// defer cancel()
-
-	// // Channel to collect errors from goroutines
-	// errCh := make(chan error, numProducers)
-
-	// // Create and start multiple producers concurrently
-	// for i := 0; i < numProducers; i++ {
-	// 	go func(id int) {
-	// 		// Instantiate a new Producer
-	// 		p := &Producer{}
-
-	// 		// Connect to RabbitMQ
-	// 		err := p.Connect("amqp://rabbitmq:Agby5kma0130@10.0.10.3:5672/")
-	// 		if err != nil {
-	// 			errCh <- err
-	// 			return
-	// 		}
-
-	// 		// Publish a message
-	// 		err = p.Publish(ctx, "your_exchange", "your_key", []byte("your_message"), "your_client_name")
-	// 		if err != nil {
-	// 			errCh <- err
-	// 			return
-	// 		}
-	// 	}(i)
-	// }
-
-	// // Wait for all goroutines to finish or timeout
-	// for i := 0; i < numProducers; i++ {
-	// 	select {
-	// 	case err := <-errCh:
-	// 		s.Failf("Error in goroutine: %v", err.Error())
-	// 	case <-ctx.Done():
-	// 		s.Failf("Test timeout: %v", ctx.Err().Error())
-	// 		return
-	// 	}
-	// }
-
-	// // Instantiate producer
-	// p := &Producer{}
-
-	// err := p.Connect("amqp://rabbitmq:Agby5kma0130@10.0.10.3:5672/")
-	// if err != nil {
-	// 	s.Failf("Connect() returned an unexpected error: %v", err.Error())
-	// }
-
-	// for {
-	// 	// Test successful publish
-	// 	ctx := context.Background()
-	// 	err = p.Publish(ctx, "exchange", "key", []byte("body"))
-	// 	if err != nil {
-	// 		s.Failf("Publish() returned an unexpected error: %v", err.Error())
-	// 	}
-	// }
-
-	// println(1)
-	// Number of messages to publish
-	numMessages := 1000
+	start := time.Now()
 
 	var wg sync.WaitGroup
 	wg.Add(numMessages)
-
-	for i := 0; i < numMessages; i++ {
-		go func(i int) {
+	for i := range numMessages {
+		go func() {
 			defer wg.Done()
 
-			ctx, cancel := context.WithTimeout(context.Background(), 115*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
 
-			message := "Message " + strconv.Itoa(i)
-			err := s.Producer.Publish(ctx, "", "test-queue", []byte(message))
-			if err != nil {
-				s.Failf("Failed to publish message %d: %v", strconv.Itoa(i), err)
-			}
-		}(i)
+			errs[i] = s.Producer.Publish(ctx, s.Exchange.Name, queue.Name, []byte(fmt.Sprintf("Message %d", i)))
+		}()
+	}
+	wg.Wait()
+
+	elapsed := time.Since(start)
+
+	for i, err := range errs {
+		s.NoErrorf(err, "publishing message %d", i)
 	}
 
-	// Wait for all goroutines to finish
-	wg.Wait()
+	// Publish only returns once the broker has confirmed, so the messages are
+	// already enqueued by the time every goroutine has returned.
+	after, err := s.Manager.CreatePassiveQueue(queue)
+	s.Require().NoError(err)
+
+	s.Equalf(before.Messages+numMessages, after.Messages,
+		"queue depth went from %d to %d, expected %d more", before.Messages, after.Messages, numMessages)
+
+	s.T().Logf("confirmed %d concurrent publishes in %s (%.0f msg/s)",
+		numMessages, elapsed, float64(numMessages)/elapsed.Seconds())
+}
+
+// TestPublishAfterClose checks a closed producer reports the problem rather
+// than blocking its caller.
+func (s *ProducerTestSuite) TestPublishAfterClose() {
+	p := &Producer{}
+	s.Require().NoError(p.Connect(uri()))
+
+	s.NoError(p.Publish(context.Background(), s.Exchange.Name, s.Exchange.Queues[0].Name, []byte("before close")))
+
+	p.Close()
+	p.Close() // Idempotent.
+
+	s.ErrorIs(p.Publish(context.Background(), s.Exchange.Name, s.Exchange.Queues[0].Name, []byte("after close")), ErrNotConnected)
+}
+
+// TestReconnect checks Connect can replace a live channel and that the producer
+// keeps publishing afterwards, without leaving the previous connection behind.
+func (s *ProducerTestSuite) TestReconnect() {
+	p := &Producer{}
+	s.Require().NoError(p.Connect(uri()))
+	defer p.Close()
+
+	first := p.Connection
+
+	s.Require().NoError(p.Connect(uri()))
+	s.NotSame(first, p.Connection, "Connect should have installed a new connection")
+	s.True(first.Conn.IsClosed(), "the superseded connection should have been closed")
+
+	s.NoError(p.Publish(context.Background(), s.Exchange.Name, s.Exchange.Queues[0].Name, []byte("after reconnect")))
 }

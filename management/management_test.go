@@ -46,11 +46,15 @@ func (s *ManagementTestSuite) SetupSuite() {
 }
 
 func (s *ManagementTestSuite) TestSetup() {
-	err := s.Manager.Connect("amqp://guest:guest@localhost:5672/", s.SetupArgs)
+	err := s.Manager.Connect("amqp://rabbitmq:rabbitmq@localhost:5672/", s.SetupArgs)
 	s.NoError(err)
 }
 
 func (s *ManagementTestSuite) TestTearDown() {
+	// TestSetup runs first and leaves Connection nil if it could not reach the
+	// broker. Without this the teardown panics and buries that failure.
+	s.Require().NotNil(s.Manager.Connection, "connect failed in TestSetup, nothing to tear down")
+
 	err := s.Manager.DeleteExchanges(s.SetupArgs.Exchanges)
 	s.NoError(err)
 }
