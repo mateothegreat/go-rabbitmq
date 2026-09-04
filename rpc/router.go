@@ -11,7 +11,7 @@ import (
 	"github.com/mateothegreat/go-rabbitmq/types"
 	"github.com/streadway/amqp"
 
-	"github.com/mateothegreat/go-multilog/multilog"
+	"github.com/mateothegreat/multilog"
 )
 
 type RPCArgs struct {

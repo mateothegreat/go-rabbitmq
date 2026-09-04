@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	amqprpc "github.com/0x4b53/amqp-rpc"
-	"github.com/mateothegreat/go-multilog/multilog"
+	"github.com/mateothegreat/multilog"
 )
 
 var rpcClient *amqprpc.Client
